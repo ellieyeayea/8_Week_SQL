@@ -1,3 +1,6 @@
+-- This is my answer for Week 1 SQL Challenge: Danny's Diner by Data with Danny
+-- https://8weeksqlchallenge.com/case-study-1/
+
 -- 1. What is the total amount each customer spent at the restaurant?
 SELECT 
 	s.customer_id,
