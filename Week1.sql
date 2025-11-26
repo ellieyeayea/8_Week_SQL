@@ -130,3 +130,53 @@ WHERE EXTRACT(MONTH from s.order_date) = 1
 GROUP BY s.customer_id;
 
 
+-- Bonus question: Join All The Things
+CREATE VIEW All_data AS
+SELECT
+	s.customer_id,
+    s.order_date,
+    m.product_name,
+    m.price,
+    CASE WHEN s.order_date >= mb.join_date THEN 'Y'
+    	ELSE 'N'
+    END as member
+
+FROM dannys_diner.sales as s
+	JOIN dannys_diner.menu as m
+    	ON s.product_id = m.product_id
+    LEFT JOIN dannys_diner.members as mb
+    	ON s.customer_id = mb.customer_id
+ORDER BY s.customer_id, s.order_date;
+
+Select * from All_data;
+
+
+-- Bonus question: Rank All The Things
+CREATE VIEW Member_rank AS
+SELECT
+	s.customer_id,
+    s.order_date,
+    m.product_name,
+    m.price,
+    CASE WHEN s.order_date >= mb.join_date THEN 'Y'
+    	ELSE 'N'
+    END as member,
+	COALESCE(r.ranking, null) as ranking
+FROM dannys_diner.sales as s
+	JOIN dannys_diner.menu as m
+    	ON s.product_id = m.product_id
+    LEFT JOIN dannys_diner.members as mb
+    	ON s.customer_id = mb.customer_id
+    LEFT JOIN (SELECT DISTINCT
+                s.customer_id,
+                s.order_date,
+                RANK() OVER(PARTITION BY s.customer_id ORDER BY s.order_date) as ranking
+            FROM dannys_diner.sales as s
+                 JOIN dannys_diner.members as mb
+                    ON s.customer_id = mb.customer_id
+            WHERE s.order_date >= mb.join_date) as r
+         ON s.customer_id = r.customer_id
+         AND s.order_date = r.order_date
+ORDER BY s.customer_id, s.order_date;
+
+Select * from Member_rank;
