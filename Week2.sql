@@ -117,3 +117,68 @@ SELECT
 FROM pizza_runner.customer_orders
 GROUP BY "Day of the week", "Day"
 ORDER BY "Day of the week";
+
+
+-- Part B. Runner and Customer Experience
+-- 1. How many runners signed up for each 1 week period? (i.e. week starts 2021-01-01)
+SELECT 
+	(DATE_TRUNC('Week', registration_date::TIMESTAMP) + INTERVAL '4 days')::DATE as "Week start",
+    COUNT(*) as "Runners signed up"
+FROM pizza_runner.runners
+GROUP BY "Week start"
+ORDER BY "Week start";
+
+-- 2. What was the average time in minutes it took for each runner to arrive at the Pizza Runner HQ to pickup the order?
+SELECT
+    AVG(EXTRACT(EPOCH FROM (ro.pickup_time::TIMESTAMP - co.order_time::TIMESTAMP))) / 60 as "Average runner arrival time (minutes)"
+FROM pizza_runner.customer_orders co
+	JOIN pizza_runner.runner_orders ro
+    	ON co.order_id = ro.order_id
+WHERE ro.pickup_time <> '';
+
+-- 3. Is there any relationship between the number of pizzas and how long the order takes to prepare?
+SELECT DISTINCT
+	co.order_id,
+	COUNT(co.pizza_id)OVER(PARTITION BY co.order_id) as "Pizza prepared for order",
+    EXTRACT(EPOCH FROM (ro.pickup_time::TIMESTAMP - co.order_time::TIMESTAMP))/60 as "Time to prepare order (minutes)"
+FROM pizza_runner.customer_orders co
+	JOIN pizza_runner.runner_orders ro
+    	ON co.order_id = ro.order_id
+WHERE ro.pickup_time <> ''
+ORDER BY co.order_id;
+
+-- 4. What was the average distance travelled for each customer?
+SELECT
+	co.customer_id,
+	ROUND(AVG(ro.distance::NUMERIC), 2) as "Average distance travelled (km)"
+FROM pizza_runner.customer_orders co
+	JOIN pizza_runner.runner_orders ro
+    	ON co.order_id = ro.order_id
+WHERE ro.distance <> ''
+GROUP BY co.customer_id
+ORDER BY co.customer_id;
+        
+-- 5. What was the difference between the longest and shortest delivery times for all orders?
+SELECT
+	MAX(duration)::NUMERIC - MIN(duration)::NUMERIC as "Difference between longest and shortest delivery time (minutes)"
+FROM pizza_runner.runner_orders
+WHERE duration <> '';
+
+-- 6. What was the average speed for each runner for each delivery and do you notice any trend for these values?
+SELECT 
+	runner_id,
+	AVG(duration::NUMERIC) as "Average delivery speed (minutes)"
+FROM pizza_runner.runner_orders
+WHERE duration <> ''
+GROUP BY runner_id
+ORDER BY runner_id;
+
+-- 7. What is the successful delivery percentage for each runner?
+SELECT DISTINCT 
+	runner_id,
+	COUNT(order_id)OVER(PARTITION BY runner_id) as "All orders",
+    SUM(CASE WHEN duration <> '' THEN 1 ELSE 0 END)OVER(PARTITION BY runner_id) as "Successful delivery",
+    (SUM(CASE WHEN duration <> '' THEN 1 ELSE 0 END)OVER(PARTITION BY runner_id)::FLOAT / COUNT(order_id)OVER(PARTITION BY runner_id)::FLOAT)*100 || '%' as "Successful delivery percentage"
+FROM 
+	pizza_runner.runner_orders
+ORDER BY runner_id;
