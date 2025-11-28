@@ -182,3 +182,136 @@ SELECT DISTINCT
 FROM 
 	pizza_runner.runner_orders
 ORDER BY runner_id;
+
+-- Part C. Ingredient Optimisation
+-- 1. What are the standard ingredients for each pizza?
+SELECT
+    pn.pizza_name,
+    STRING_AGG(pt.topping_name, ', ' ORDER BY pt.topping_name) as "Standard ingredients"
+FROM pizza_runner.pizza_names pn
+	JOIN (SELECT 
+              pizza_id,
+              REGEXP_SPLIT_TO_TABLE(toppings, ', ') as top
+          FROM pizza_runner.pizza_recipes) pr
+          ON pn.pizza_id = pr.pizza_id
+    JOIN pizza_runner.pizza_toppings pt
+    	ON pr.top::INT = pt.topping_id
+GROUP BY pn.pizza_name;
+
+-- 2. What was the most commonly added extra?
+SELECT 
+	pt.topping_name as "Most commonly added extra",
+	COUNT(ex.e) as "Times added" 
+FROM (SELECT 
+      	order_id,
+      	REGEXP_SPLIT_TO_TABLE(extras, ', ') as e
+      FROM pizza_runner.customer_orders
+      WHERE extras <> '') ex
+      JOIN pizza_runner.pizza_toppings pt
+      			ON ex.e::INT = pt.topping_id
+GROUP BY topping_name
+ORDER BY "Times added" DESC
+LIMIT 1;
+
+
+-- 3. What was the most common exclusion?
+SELECT 
+	pt.topping_name as "Most common exclusion",
+	COUNT(ex.e) as "Times excluded"
+FROM
+	(SELECT 
+      	order_id,
+      	REGEXP_SPLIT_TO_TABLE(exclusions, ', ') as e
+      FROM pizza_runner.customer_orders
+      WHERE exclusions <> '') ex
+    JOIN pizza_runner.pizza_toppings pt
+      	ON ex.e::INT = pt.topping_id
+GROUP BY topping_name
+ORDER BY "Times excluded" DESC
+LIMIT 1;
+
+-- 4. Generate an order item for each record in the customers_orders table in the format of one of the following:
+--         Meat Lovers
+--         Meat Lovers - Exclude Beef
+--         Meat Lovers - Extra Bacon
+--         Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
+
+-- Still not quite right for case 10
+
+-- SELECT
+-- 	co.order_id,
+--     pn.pizza_name || 
+--     	CASE WHEN excl.order_id IS NOT NULL THEN ' - Exclude ' || excl.exclude ELSE '' END || 	
+--     	CASE WHEN extra.order_id IS NOT NULL THEN ' - Extra ' || extra.extra ELSE '' END as "Order item"
+-- FROM pizza_runner.customer_orders co
+-- 	JOIN pizza_runner.pizza_names pn
+--     	ON co.pizza_id = pn.pizza_id
+--     LEFT JOIN (SELECT 
+--                     ext.order_id, ext.pizza_id,
+--                     STRING_AGG(ptext.topping_name, ', ' ORDER BY ptext.topping_name) as "extra"
+--                 FROM (SELECT DISTINCT
+--                           order_id,
+--                           pizza_id,
+--                           REGEXP_SPLIT_TO_TABLE(extras, ', ') as e
+--                       FROM pizza_runner.customer_orders
+--                       WHERE extras <> '') ext
+--                      JOIN pizza_runner.pizza_toppings ptext
+--                         ON ext.e::INT = ptext.topping_id   
+--                 GROUP BY ext.order_id, ext.pizza_id) extra
+--          ON co.order_id = extra.order_id
+--          AND co.pizza_id = extra.pizza_id
+--    	LEFT JOIN (SELECT
+--                     ex.order_id, ex.pizza_id,
+--                     STRING_AGG(pt.topping_name, ', ' ORDER BY pt.topping_name) as "exclude"
+--                 FROM (SELECT DISTINCT 
+--                           order_id,
+--                           pizza_id,
+--                           REGEXP_SPLIT_TO_TABLE(exclusions, ', ') as e
+--                       FROM pizza_runner.customer_orders
+--                       WHERE exclusions <> '') ex
+--                      JOIN pizza_runner.pizza_toppings pt
+--                         ON ex.e::INT = pt.topping_id
+--                 GROUP BY ex.order_id, ex.pizza_id) excl
+--          ON co.order_id = excl.order_id
+--          AND co.pizza_id = excl.pizza_id                
+-- ORDER BY co.order_id, co.pizza_id                
+--                 ;
+            
+
+-- 5. Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
+--         For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
+
+-- SELECT 
+-- 	co.order_id, co.pizza_id, pr.toppings ||
+--     CASE WHEN co.extras <> '' THEN ', ' || co.extras ELSE '' END, co.exclusions
+
+
+-- FROM pizza_runner.customer_orders co
+-- 	JOIN pizza_runner.pizza_recipes pr
+--     	ON co.pizza_id = pr.pizza_id
+-- ORDER BY co.order_id, co.pizza_id;
+
+
+-- SELECT 
+-- 	co.order_id, co.pizza_id, 
+--     pr.toppings || CASE WHEN co.extras <> '' THEN ', ' || co.extras ELSE '' END as toppings,
+--     REGEXP_SPLIT_TO_TABLE(pr.toppings || CASE WHEN co.extras <> '' THEN ', ' || co.extras ELSE '' END, ', ') as top
+--     , co.exclusions
+-- FROM pizza_runner.customer_orders co
+-- 	JOIN pizza_runner.pizza_recipes pr
+--     	ON co.pizza_id = pr.pizza_id
+-- WHERE NOT EXISTS (SELECT 
+--                       		REGEXP_SPLIT_TO_TABLE(co2.exclusions, ', ')
+--                       FROM pizza_runner.customer_orders co2
+--                       WHERE co.order_id = co2.order_id
+--                       AND co.pizza_id = co2.pizza_id
+--                       AND co.exclusions = co2.exclusions
+--                  	  AND co2.exclusions <> '')
+-- ORDER BY co.order_id, co.pizza_id, toppings, top;
+
+-- SELECT co2.order_id,
+--                       		REGEXP_SPLIT_TO_TABLE(co2.exclusions)
+--                       FROM pizza_runner.customer_orders co2
+-- 	WHERE exclusions <> ''
+
+-- 6. What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
