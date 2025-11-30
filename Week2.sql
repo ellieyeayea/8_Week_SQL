@@ -280,37 +280,38 @@ ORDER BY nco.order_id, nco.pizza_id;
 -- 5. Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
 --         For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
 
--- SELECT 
--- 	co.order_id, co.pizza_id, pr.toppings ||
---     CASE WHEN co.extras <> '' THEN ', ' || co.extras ELSE '' END, co.exclusions
-
-
--- FROM pizza_runner.customer_orders co
--- 	JOIN pizza_runner.pizza_recipes pr
---     	ON co.pizza_id = pr.pizza_id
--- ORDER BY co.order_id, co.pizza_id;
-
-
--- SELECT 
--- 	co.order_id, co.pizza_id, 
---     pr.toppings || CASE WHEN co.extras <> '' THEN ', ' || co.extras ELSE '' END as toppings,
---     REGEXP_SPLIT_TO_TABLE(pr.toppings || CASE WHEN co.extras <> '' THEN ', ' || co.extras ELSE '' END, ', ') as top
---     , co.exclusions
--- FROM pizza_runner.customer_orders co
--- 	JOIN pizza_runner.pizza_recipes pr
---     	ON co.pizza_id = pr.pizza_id
--- WHERE NOT EXISTS (SELECT 
---                       		REGEXP_SPLIT_TO_TABLE(co2.exclusions, ', ')
---                       FROM pizza_runner.customer_orders co2
---                       WHERE co.order_id = co2.order_id
---                       AND co.pizza_id = co2.pizza_id
---                       AND co.exclusions = co2.exclusions
---                  	  AND co2.exclusions <> '')
--- ORDER BY co.order_id, co.pizza_id, toppings, top;
-
--- SELECT co2.order_id,
---                       		REGEXP_SPLIT_TO_TABLE(co2.exclusions)
---                       FROM pizza_runner.customer_orders co2
--- 	WHERE exclusions <> ''
+With nco as (SELECT 
+             	ROW_NUMBER()OVER() as rn, *
+			 FROM pizza_runner.customer_orders)
+     ,pi as (SELECT 
+                nco.rn, nco.order_id, nco.pizza_id, 
+                -- pr.toppings || CASE WHEN nco.extras <> '' THEN ', ' || nco.extras ELSE '' END as toppings,
+                REGEXP_SPLIT_TO_TABLE(pr.toppings || CASE WHEN nco.extras <> '' THEN ', ' || nco.extras ELSE '' END, ', ') as top
+                -- , nco.exclusions
+            FROM nco
+                JOIN pizza_runner.pizza_recipes pr
+                    ON nco.pizza_id = pr.pizza_id)
+     ,ft as (SELECT pi.rn, pi.top, COUNT(pi.top) as cnt
+                FROM pi
+                LEFT JOIN (SELECT rn, REGEXP_SPLIT_TO_TABLE(exclusions, ', ') as ex
+                                  FROM nco
+                                  WHERE exclusions <> '') exc
+                     ON pi.rn = exc.rn
+                     AND pi.top = exc.ex
+            WHERE exc.rn is null
+            GROUP BY pi.rn, pi.top)
+SELECT
+	nco.rn, nco.order_id, nco.pizza_id,
+    pn.pizza_name || ': ' || STRING_AGG(CASE WHEN ft.cnt > 1 THEN ft.cnt||'x'||pt.topping_name 
+                                        ELSE pt.topping_name END, ', ' ORDER BY pt.topping_name) as "Pizza ingredients list"
+FROM nco
+	JOIN pizza_runner.pizza_names pn
+    	ON nco.pizza_id = pn.pizza_id
+    JOIN ft
+    	ON nco.rn = ft.rn
+    JOIN pizza_runner.pizza_toppings pt
+    	ON ft.top::INT = pt.topping_id
+GROUP BY nco.rn, nco.order_id, nco.pizza_id, pn.pizza_name
+ORDER BY nco.order_id, nco.pizza_id;
 
 -- 6. What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
