@@ -235,7 +235,6 @@ LIMIT 1;
 --         Meat Lovers - Exclude Beef
 --         Meat Lovers - Extra Bacon
 --         Meat Lovers - Exclude Cheese, Bacon - Extra Mushroom, Peppers
-
 With nco as (SELECT 
              	ROW_NUMBER()OVER() as rn, *
 			 FROM pizza_runner.customer_orders)
@@ -279,15 +278,12 @@ ORDER BY nco.order_id, nco.pizza_id;
 
 -- 5. Generate an alphabetically ordered comma separated ingredient list for each pizza order from the customer_orders table and add a 2x in front of any relevant ingredients
 --         For example: "Meat Lovers: 2xBacon, Beef, ... , Salami"
-
 With nco as (SELECT 
              	ROW_NUMBER()OVER() as rn, *
 			 FROM pizza_runner.customer_orders)
      ,pi as (SELECT 
                 nco.rn, nco.order_id, nco.pizza_id, 
-                -- pr.toppings || CASE WHEN nco.extras <> '' THEN ', ' || nco.extras ELSE '' END as toppings,
                 REGEXP_SPLIT_TO_TABLE(pr.toppings || CASE WHEN nco.extras <> '' THEN ', ' || nco.extras ELSE '' END, ', ') as top
-                -- , nco.exclusions
             FROM nco
                 JOIN pizza_runner.pizza_recipes pr
                     ON nco.pizza_id = pr.pizza_id)
@@ -315,3 +311,54 @@ GROUP BY nco.rn, nco.order_id, nco.pizza_id, pn.pizza_name
 ORDER BY nco.order_id, nco.pizza_id;
 
 -- 6. What is the total quantity of each ingredient used in all delivered pizzas sorted by most frequent first?
+With nco as (SELECT 
+             	ROW_NUMBER()OVER() as rn, co.*
+			 FROM pizza_runner.customer_orders co
+             JOIN pizza_runner.runner_orders ro
+                  ON co.order_id = ro.order_id
+             WHERE ro.pickup_time <> '')
+     ,pi as (SELECT 
+                nco.rn, nco.order_id, nco.pizza_id, 
+                REGEXP_SPLIT_TO_TABLE(pr.toppings || CASE WHEN nco.extras <> '' THEN ', ' || nco.extras ELSE '' END, ', ') as top
+            FROM nco
+                JOIN pizza_runner.pizza_recipes pr
+                    ON nco.pizza_id = pr.pizza_id)
+SELECT pt.topping_name, COUNT(pi.top) as "Total used" 
+FROM pi
+	JOIN pizza_toppings pt
+    	ON pi.top::INT = pt.topping_id
+	LEFT JOIN (SELECT rn, REGEXP_SPLIT_TO_TABLE(exclusions, ', ') as ex
+               FROM nco
+               WHERE exclusions <> '') exc
+        ON pi.rn = exc.rn
+        AND pi.top = exc.ex
+WHERE exc.rn is null
+GROUP BY pt.topping_name
+ORDER BY "Total used" DESC;
+
+-- Part D. Pricing and Ratings
+-- 1. If a Meat Lovers pizza costs $12 and Vegetarian costs $10 and there were no charges for changes - how much money has Pizza Runner made so far if there are no delivery fees?
+
+SELECT
+	SUM(CASE WHEN co.pizza_id = 1 THEN 12 
+        ELSE 10 END) as "Total money made"
+FROM pizza_runner.customer_orders co
+	JOIN pizza_runner.runner_orders ro
+    	ON co.order_id = ro.order_id
+WHERE ro.pickup_time <> '';
+
+-- 2. What if there was an additional $1 charge for any pizza extras?
+--    Add cheese is $1 extra
+-- 3. The Pizza Runner team now wants to add an additional ratings system that allows customers to rate their runner, how would you design an additional table for this new dataset - generate a schema for this new table and insert your own data for ratings for each successful customer order between 1 to 5.
+-- 4. Using your newly generated table - can you join all of the information together to form a table which has the following information for successful deliveries?
+        -- customer_id
+        -- order_id
+        -- runner_id
+        -- rating
+        -- order_time
+        -- pickup_time
+        -- Time between order and pickup
+        -- Delivery duration
+        -- Average speed
+        -- Total number of pizzas
+-- 5. If a Meat Lovers pizza was $12 and Vegetarian $10 fixed prices with no cost for extras and each runner is paid $0.30 per kilometre traveled - how much money does Pizza Runner have left over after these deliveries?
