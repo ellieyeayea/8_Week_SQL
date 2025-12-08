@@ -338,7 +338,6 @@ ORDER BY "Total used" DESC;
 
 -- Part D. Pricing and Ratings
 -- 1. If a Meat Lovers pizza costs $12 and Vegetarian costs $10 and there were no charges for changes - how much money has Pizza Runner made so far if there are no delivery fees?
-
 SELECT
 	SUM(CASE WHEN co.pizza_id = 1 THEN 12 
         ELSE 10 END) as "Total money made"
@@ -349,7 +348,50 @@ WHERE ro.pickup_time <> '';
 
 -- 2. What if there was an additional $1 charge for any pizza extras?
 --    Add cheese is $1 extra
+With nco as (SELECT 
+             	ROW_NUMBER()OVER() as rn, *
+			 FROM pizza_runner.customer_orders),
+     Total_extra as (SELECT 
+                     	  extra.rn,
+                          SUM(CASE WHEN extra.e = '4' THEN 2 ELSE 1 END) as te
+                      FROM (SELECT
+                            	nco.rn,
+                                REGEXP_SPLIT_TO_TABLE(nco.extras, ', ') AS e        
+                            FROM nco
+                                JOIN pizza_runner.runner_orders ro
+                                    ON nco.order_id = ro.order_id
+                            WHERE ro.pickup_time <> ''
+                            AND nco.extras <> '') extra
+                       GROUP BY extra.rn)
+SELECT
+	SUM(CASE WHEN nco.pizza_id = 1 THEN 12 
+        ELSE 10 END) + SUM(te.te) as "Total money made"   
+FROM nco
+	JOIN pizza_runner.runner_orders ro
+    	ON nco.order_id = ro.order_id
+    LEFT JOIN Total_extra te
+    	ON nco.rn = te.rn
+WHERE ro.pickup_time <> '';
+
 -- 3. The Pizza Runner team now wants to add an additional ratings system that allows customers to rate their runner, how would you design an additional table for this new dataset - generate a schema for this new table and insert your own data for ratings for each successful customer order between 1 to 5.
+DROP TABLE IF EXISTS customer_ratings;
+CREATE TABLE customer_ratings (
+  "order_id" INTEGER,
+  "rating" INTEGER
+);
+
+INSERT INTO customer_ratings
+	("order_id", "rating")
+VALUES
+	('1', '1'),
+    ('2', '5'),
+    ('3', '4'),
+    ('4', '3'),
+    ('5', '4'),
+    ('7', '5'),
+    ('8', '2'),
+    ('10', '5');
+
 -- 4. Using your newly generated table - can you join all of the information together to form a table which has the following information for successful deliveries?
         -- customer_id
         -- order_id
@@ -361,4 +403,41 @@ WHERE ro.pickup_time <> '';
         -- Delivery duration
         -- Average speed
         -- Total number of pizzas
+ SELECT DISTINCT
+ 	co.customer_id,
+    co.order_id,
+    ro.runner_id,
+    cr.rating,
+    co.order_time,
+    ro.pickup_time,
+    EXTRACT(EPOCH FROM (ro.pickup_time::TIMESTAMP - co.order_time::TIMESTAMP))/60 as "Time between order and pickup",
+    ro.duration as "Delivery duration",
+    AVG(ro.duration::NUMERIC)OVER() as "Average speed",
+    COUNT(co.pizza_id)OVER(PARTITION BY co.order_id) as "Total number of pizzas"
+ FROM pizza_runner.customer_orders co
+ 	JOIN pizza_runner.runner_orders ro
+    	ON co.order_id = ro.order_id
+    JOIN pizza_runner.customer_ratings cr
+    	ON co.order_id = cr.order_id
+WHERE ro.pickup_time <> '';
+
 -- 5. If a Meat Lovers pizza was $12 and Vegetarian $10 fixed prices with no cost for extras and each runner is paid $0.30 per kilometre traveled - how much money does Pizza Runner have left over after these deliveries?
+WITH Total_order AS (SELECT
+                          ro.order_id,
+                          SUM(CASE WHEN co.pizza_id = 1 THEN 12 
+                              ELSE 10 END) as total
+                      FROM pizza_runner.customer_orders co
+                          JOIN pizza_runner.runner_orders ro
+                              ON co.order_id = ro.order_id
+                      WHERE ro.pickup_time <> ''
+                      GROUP BY ro.order_id)
+SELECT
+	SUM(tor.total - (ro.distance::float*0.3)) as "Total money made"
+FROM Total_order tor
+	JOIN pizza_runner.runner_orders ro
+    	ON tor.order_id = ro.order_id;
+
+-- Bonus question
+-- If Danny wants to expand his range of pizzas - how would this impact the existing data design? Write an INSERT statement to demonstrate what would happen if a new Supreme pizza with all the toppings was added to the Pizza Runner menu?
+INSERT INTO pizza_names ("pizza_id", "pizza_name") VALUES (3, 'Supreme');
+INSERT INTO pizza_recipes ("pizza_id", "toppings") VALUES (3, '1, 3, 4, 5, 6, 7, 8, 9, 12');
