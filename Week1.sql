@@ -4,7 +4,7 @@
 -- 1. What is the total amount each customer spent at the restaurant?
 SELECT 
 	s.customer_id,
-    SUM(m.price)
+    SUM(m.price) as "Total amount spent"
 FROM
 	dannys_diner.sales as s
 	JOIN dannys_diner.menu as m
@@ -15,7 +15,7 @@ GROUP BY s.customer_id;
 -- 2. How many days has each customer visited the restaurant?
 SELECT 
 	customer_id,
-	COUNT(DISTINCT order_date)
+	COUNT(DISTINCT order_date) as "Days visited"
 FROM dannys_diner.sales
 GROUP BY customer_id;
 
@@ -35,10 +35,11 @@ ORDER BY s.customer_id, s.order_date;
 SELECT DISTINCT
 	s.product_id,
     m.product_name,
-    COUNT(s.order_date)OVER(PARTITION BY s.product_id) as cnt
+    COUNT(s.order_date) as cnt
 FROM dannys_diner.sales as s 
 	JOIN dannys_diner.menu as m
     	ON s.product_id = m.product_id
+GROUP BY s.product_id, m.product_name
 ORDER BY cnt DESC
 LIMIT 1;
     
@@ -47,12 +48,13 @@ LIMIT 1;
 SELECT DISTINCT ON (s.customer_id)
 	s.customer_id,
     s.product_id,
-    COUNT(s.order_date)OVER(PARTITION BY s.customer_id, s.product_id) as cnt,
+    COUNT(s.order_date) as cnt,
     m.product_name
 FROM dannys_diner.sales as s
 	JOIN dannys_diner.menu as m
     	ON s.product_id = m.product_id
-ORDER BY s.customer_id, cnt DESC;
+GROUP BY s.customer_id, s.product_id, m.product_name
+ORDER BY s.customer_id, cnt DESC, s.product_id;
 
 
 -- 6. Which item was purchased first by the customer after they became a member? 	
@@ -66,7 +68,8 @@ FROM
     	ON s.customer_id = mb.customer_id
     JOIN dannys_diner.menu as m 
     	ON s.product_id = m.product_id
-WHERE s.order_date >= mb.join_date;
+WHERE s.order_date >= mb.join_date
+ORDER BY s.customer_id, s.order_date;
 
 
 -- 7. Which item was purchased just before the customer became a member?
@@ -80,14 +83,15 @@ FROM
     	ON s.customer_id = mb.customer_id
     JOIN dannys_diner.menu as m 
     	ON s.product_id = m.product_id
-WHERE s.order_date < mb.join_date;
+WHERE s.order_date < mb.join_date
+ORDER BY s.customer_id, s.order_date DESC;
 
 
 -- 8. What is the total items and amount spent for each member before they became a member?
 SELECT 
 	s.customer_id,
-    COUNT(s.product_id),
-    SUM(m.price)
+    COUNT(s.product_id) as "Total items bought",
+    SUM(m.price) as "Total amount spent"
 FROM 
 	dannys_diner.sales as s
     JOIN dannys_diner.members as mb
